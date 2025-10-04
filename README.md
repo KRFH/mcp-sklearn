@@ -27,9 +27,12 @@ Claude Desktop / Claude Code / MCP CLI など **MCP 対応クライアント**�
 
 ## 🔧 提供ツール
 
-* `add(a: int, b: int)` — 2つの整数を加算
-* `echo(text: str)` — テキストをそのまま返す
-* `describe_csv(path: str)` — `data/` 配下の CSV を読み込み基本統計を返す
+* `list_datasets()` — `data/` 配下の CSV 一覧を取得
+* `preview_csv(path: str, n_rows: int = 5)` — 先頭数行を取得
+* `column_info(path: str)` — 各列の dtype / 欠損数 / ユニーク数を取得
+* `missing_values(path: str)` — 欠損値サマリーを取得
+* `describe_csv(path: str)` — 全列の基本統計量を取得
+* `correlation_matrix(path: str, columns?: List[str], method: str = "pearson")` — 数値列の相関行列を計算
 
 > **パス指定のポイント**
 >
@@ -72,9 +75,9 @@ CLI が立ち上がったら例:
 
 ```
 list-tools
-call-tool add {"a": 1, "b": 2}
-call-tool echo {"text": "hello"}
-call-tool describe_csv {"path": "sample.csv"}
+call-tool list_datasets
+call-tool preview_csv {"path": "sample.csv", "n_rows": 3}
+call-tool correlation_matrix {"path": "sample.csv"}
 ```
 
 > **注意:**
