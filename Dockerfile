@@ -4,11 +4,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential curl ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+RUN pip install uv
 
 WORKDIR /app
 COPY server/pyproject.toml /app/
-RUN /root/.cargo/bin/uv pip install --system -r <(/root/.cargo/bin/uv pip compile -q pyproject.toml)
+RUN uv pip compile -q pyproject.toml > requirements.txt && \
+    uv pip install --system -r requirements.txt
 
 COPY server/server.py /app/server.py
 
