@@ -35,10 +35,18 @@ def _resolve_csv_path(path: str) -> Path:
 
 
 def _ensure_serializable(values: Iterable) -> List[Optional[object]]:
+    import numpy as np
+    
     serializable: List[Optional[object]] = []
     for value in values:
         if pd.isna(value):
             serializable.append(None)
+        elif isinstance(value, (np.integer, np.floating)):
+            # Convert numpy numeric types to Python types
+            serializable.append(value.item())
+        elif isinstance(value, np.ndarray):
+            # Convert numpy arrays to lists
+            serializable.append(value.tolist())
         else:
             serializable.append(value)
     return serializable
@@ -172,11 +180,12 @@ def describe_csv(path: str) -> DescribeCSVOutput:
 
     csv_path = _resolve_csv_path(path)
     df = pd.read_csv(csv_path)
-    describe_df = df.describe(include="all", datetime_is_numeric=True).transpose()
+    describe_df = df.describe(include="all").transpose()
     describe: Dict[str, Dict[str, Optional[Any]]] = {}
     for column, stats in describe_df.iterrows():
         describe[column] = {
-            key: (None if pd.isna(value) else value) for key, value in stats.items()
+            key: (None if pd.isna(value) else _ensure_serializable([value])[0]) 
+            for key, value in stats.items()
         }
 
     return DescribeCSVOutput(
