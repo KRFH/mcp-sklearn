@@ -1,0 +1,13 @@
+version: "3.9"
+services:
+  mcp:
+    build: .
+    image: mcp-proto:latest
+    container_name: mcp-proto
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped

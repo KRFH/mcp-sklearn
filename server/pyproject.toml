@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "mcp-proto"
+version = "0.1.0"
+description = "MCP Proto Server"
+authors = ["Your Name <your.email@example.com>"]
+package-mode = false
+
+# ここをパッケージ名に合わせる
+packages = [{ include = "mcp_proto" }]
+
+[tool.poetry.dependencies]
+python = ">=3.11"
+mcp = ">=1.2.0"
+pandas = ">=2.2.0"
+pyarrow = ">=15.0.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
