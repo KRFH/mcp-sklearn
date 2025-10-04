@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 import pandas as pd
 from mcp.server.fastmcp import FastMCP
@@ -43,90 +44,146 @@ def _ensure_serializable(values: Iterable) -> List[Optional[object]]:
     return serializable
 
 
+@dataclass
+class ListDatasetsOutput:
+    data_root: str
+    datasets: List[str]
+
+
+@dataclass
+class PreviewCSVOutput:
+    path: str
+    n_rows: int
+    columns: List[str]
+    rows: List[Dict[str, Optional[Any]]]
+
+
+@dataclass
+class ColumnSummary:
+    dtype: str
+    non_null: int
+    null: int
+    unique: int
+
+
+@dataclass
+class ColumnInfoOutput:
+    path: str
+    columns: Dict[str, ColumnSummary]
+
+
+@dataclass
+class MissingValueSummary:
+    missing: int
+    ratio: float
+
+
+@dataclass
+class MissingValuesOutput:
+    path: str
+    summary: Dict[str, MissingValueSummary]
+    n_rows: int
+
+
+@dataclass
+class DescribeCSVOutput:
+    path: str
+    shape: List[int]
+    describe: Dict[str, Dict[str, Optional[Any]]]
+
+
+@dataclass
+class CorrelationMatrixOutput:
+    path: str
+    columns: List[str]
+    method: str
+    matrix: Dict[str, Dict[str, Optional[float]]]
+
+
 @mcp.tool()
-def list_datasets() -> Dict[str, List[str]]:
+def list_datasets() -> ListDatasetsOutput:
     """List CSV files available under the data directory."""
 
-    datasets = []
+    datasets: List[str] = []
     if DATA_ROOT.exists():
         for csv_file in sorted(DATA_ROOT.rglob("*.csv")):
             try:
                 datasets.append(str(csv_file.relative_to(DATA_ROOT)))
             except ValueError:
                 datasets.append(str(csv_file))
-    return {"data_root": str(DATA_ROOT), "datasets": datasets}
+    return ListDatasetsOutput(data_root=str(DATA_ROOT), datasets=datasets)
 
 
 @mcp.tool()
-def preview_csv(path: str, n_rows: int = 5) -> Dict[str, object]:
+def preview_csv(path: str, n_rows: int = 5) -> PreviewCSVOutput:
     """Return the first ``n_rows`` rows from the CSV file."""
 
     csv_path = _resolve_csv_path(path)
     df = pd.read_csv(csv_path)
     preview_df = df.head(n_rows).where(lambda d: ~d.isna(), other=None)
-    return {
-        "path": str(csv_path),
-        "n_rows": len(preview_df),
-        "columns": preview_df.columns.tolist(),
-        "rows": preview_df.to_dict(orient="records"),
-    }
+    rows: List[Dict[str, Optional[Any]]] = preview_df.to_dict(orient="records")
+    return PreviewCSVOutput(
+        path=str(csv_path),
+        n_rows=len(preview_df),
+        columns=preview_df.columns.tolist(),
+        rows=rows,
+    )
 
 
 @mcp.tool()
-def column_info(path: str) -> Dict[str, Dict[str, object]]:
+def column_info(path: str) -> ColumnInfoOutput:
     """Return dtype and basic counts for each column."""
 
     csv_path = _resolve_csv_path(path)
     df = pd.read_csv(csv_path)
 
-    info: Dict[str, Dict[str, object]] = {}
+    info: Dict[str, ColumnSummary] = {}
     for column in df.columns:
         series = df[column]
-        info[column] = {
-            "dtype": str(series.dtype),
-            "non_null": int(series.notna().sum()),
-            "null": int(series.isna().sum()),
-            "unique": int(series.nunique(dropna=True)),
-        }
-    return {"path": str(csv_path), "columns": info}
+        info[column] = ColumnSummary(
+            dtype=str(series.dtype),
+            non_null=int(series.notna().sum()),
+            null=int(series.isna().sum()),
+            unique=int(series.nunique(dropna=True)),
+        )
+    return ColumnInfoOutput(path=str(csv_path), columns=info)
 
 
 @mcp.tool()
-def missing_values(path: str) -> Dict[str, Dict[str, float]]:
+def missing_values(path: str) -> MissingValuesOutput:
     """Summarise missing value counts and ratios."""
 
     csv_path = _resolve_csv_path(path)
     df = pd.read_csv(csv_path)
 
     total_rows = len(df)
-    summary: Dict[str, Dict[str, float]] = {}
+    summary: Dict[str, MissingValueSummary] = {}
     for column, count in df.isna().sum().items():
-        summary[column] = {
-            "missing": int(count),
-            "ratio": float(count / total_rows) if total_rows else 0.0,
-        }
-    return {"path": str(csv_path), "summary": summary, "n_rows": total_rows}
+        summary[column] = MissingValueSummary(
+            missing=int(count),
+            ratio=float(count / total_rows) if total_rows else 0.0,
+        )
+    return MissingValuesOutput(path=str(csv_path), summary=summary, n_rows=total_rows)
 
 
 @mcp.tool()
-def describe_csv(path: str) -> Dict[str, object]:
+def describe_csv(path: str) -> DescribeCSVOutput:
     """Return descriptive statistics for the CSV file."""
 
     csv_path = _resolve_csv_path(path)
     df = pd.read_csv(csv_path)
-    describe_df = df.describe(include="all").transpose().fillna(value=None)
-
-    describe: Dict[str, Dict[str, Optional[object]]] = {}
+    describe_df = df.describe(include="all", datetime_is_numeric=True).transpose()
+    describe: Dict[str, Dict[str, Optional[Any]]] = {}
     for column, stats in describe_df.iterrows():
         describe[column] = {
             key: (None if pd.isna(value) else value) for key, value in stats.items()
         }
 
-    return {
-        "path": str(csv_path),
-        "shape": list(df.shape),
-        "describe": describe,
-    }
+    return DescribeCSVOutput(
+        path=str(csv_path),
+        shape=list(df.shape),
+        describe=describe,
+    )
 
 
 @mcp.tool()
@@ -135,7 +192,7 @@ def correlation_matrix(
     *,
     columns: Optional[List[str]] = None,
     method: str = "pearson",
-) -> Dict[str, object]:
+) -> CorrelationMatrixOutput:
     """Compute a correlation matrix for numeric columns."""
 
     csv_path = _resolve_csv_path(path)
@@ -157,12 +214,12 @@ def correlation_matrix(
         for column in corr.columns
     }
 
-    return {
-        "path": str(csv_path),
-        "columns": corr.columns.tolist(),
-        "method": method,
-        "matrix": matrix,
-    }
+    return CorrelationMatrixOutput(
+        path=str(csv_path),
+        columns=corr.columns.tolist(),
+        method=method,
+        matrix=matrix,
+    )
 
 
 if __name__ == "__main__":
