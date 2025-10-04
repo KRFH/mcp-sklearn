@@ -1,70 +1,115 @@
 # MCP Proto Server
 
-This repository contains a minimal Model Context Protocol (MCP) server implemented
-with the official Python SDK (FastMCP). It exposes a few sample tools that can be
-invoked over Streamable HTTP (SSE) or STDIO, making it easy to integrate with
-MCP-compatible clients such as Claude Desktop or Claude Code.
+このリポジトリは **Model Context Protocol (MCP)** を使った最小構成のサーバー例です。
+Python 公式 SDK（FastMCP）で実装され、Streamable HTTP または STDIO でツールを公開します。
+Claude Desktop / Claude Code / MCP CLI など **MCP 対応クライアント**から呼び出せます。
 
-## Project structure
+---
+
+## 📂 プロジェクト構成
 
 ```
 .
 ├── Dockerfile
-├── README.md
-├── data
-│   └── sample.csv
 ├── docker-compose.yml
-└── server
-    ├── pyproject.toml
-    └── server.py
+├── README.md
+├── data/                ← CSV を置く場所
+│   └── sample.csv
+└── server/
+    ├── pyproject.toml   ← Poetry プロジェクト設定
+    └── server.py        ← FastMCP サーバ本体
 ```
 
-## Available tools
+* **`data/`** にある CSV をツールから読み込めます
+* **`server/`** は Poetry で依存管理します
 
-- `add(a: int, b: int)` – add two integers.
-- `echo(text: str)` – echo the provided text.
-- `describe_csv(path: str)` – load a CSV from `/data` and return key statistics.
+---
 
-## Running with Docker
+## 🔧 提供ツール
 
-Build and start the server using Docker Compose:
+* `add(a: int, b: int)` — 2つの整数を加算
+* `echo(text: str)` — テキストをそのまま返す
+* `describe_csv(path: str)` — `data/` 配下の CSV を読み込み基本統計を返す
+
+> **パス指定のポイント**
+>
+> * `path` は基本的に `data/` からの相対パス（例: `"sample.csv"`）
+> * 絶対パスを渡す場合も `data/` 配下である必要があります
+
+---
+
+## 🚀 ローカル実行（STDIO）
+
+Poetry を利用:
+
+```bash
+cd server
+poetry install
+poetry run python server.py
+```
+
+* `server.py` の最後を `mcp.run(transport="stdio")` にすれば STDIO モードになります。この起動方法はTODO状態。
+
+---
+
+## 🌐 HTTP (Streamable) 実行
+
+開発時など HTTP で起動する場合:
+
+```bash
+cd server
+poetry run python server.py
+# http://localhost:8080/mcp で待ち受け
+```
+
+別ターミナルで **MCP-CLI** を起動:
+
+```bash
+npx @wong2/mcp-cli --url http://127.0.0.1:8080/mcp
+```
+
+CLI が立ち上がったら例:
+
+```
+list-tools
+call-tool add {"a": 1, "b": 2}
+call-tool echo {"text": "hello"}
+call-tool describe_csv {"path": "sample.csv"}
+```
+
+> **注意:**
+>
+> * `call-tool ...` は MCP-CLI の対話プロンプト内で実行します。
+> * zsh など通常のシェルで直接打つとエラーになります。
+
+---
+
+## 🐳 Docker での実行
 
 ```bash
 docker compose up --build -d
 ```
 
-Mount your own CSV files by placing them in the `data/` directory before
-starting the container. Once running, connect via Streamable HTTP at
-`http://localhost:8080/stream`.
-
-To stop the services, run:
+`data/` に自分の CSV を置いてからコンテナを起動すると、HTTP 経由でツールを呼べます。
 
 ```bash
-docker compose down
+curl -I http://localhost:8080/mcp
 ```
 
-## Local STDIO mode
+> `200` または `404` が返ればエンドポイントは有効です。
 
-For local experimentation without Docker, install dependencies and run the
-server directly:
+---
 
-```bash
-cd server
-pip install "mcp>=1.2.0" "pandas>=2.2.0" "pyarrow>=15.0.0"
-python server.py
-```
+## 💡 トラブルシューティング
 
-Update the last line in `server.py` to `mcp.run(transport="stdio")` when using
-STDIO clients.
+* **CSV が見つからないエラー**
+  → サーバーが参照する `DATA_ROOT`（既定はリポジトリ直下の `data/`）にファイルが無いか、パス指定が誤っています。
 
-## Testing the HTTP endpoint
+* **zsh: parse error near '}'**
+  → MCP-CLI の外（通常シェル）で `call-tool ...` を打ったときのエラーです。
+  必ず MCP-CLI のプロンプト内でコマンドを実行してください。
 
-After starting the Docker container, verify that the stream endpoint is
-reachable:
+* **Node バージョンエラー（SyntaxError: &&=）**
+  → Node 18 以上が必要です。`nvm install 20 && nvm use 20` などで更新してください。
 
-```bash
-curl -I http://localhost:8080/stream
-```
-
-A `200` or `404` response indicates that the endpoint is available for
-Streamable HTTP connections.
+---
