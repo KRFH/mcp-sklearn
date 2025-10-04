@@ -14,4 +14,4 @@ RUN uv pip compile -q pyproject.toml > requirements.txt && \
 COPY server/server.py /app/server.py
 
 EXPOSE 8080
-CMD ["python", "-m", "mcp.server.fastmcp.run", "server", "streamable-http", "--host", "0.0.0.0", "--port", "8080", "--module", "server"]
+CMD ["python", "server.py"]

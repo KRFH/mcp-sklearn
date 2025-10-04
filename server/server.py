@@ -7,7 +7,13 @@ import pandas as pd
 from mcp.server.fastmcp import FastMCP
 
 
-DATA_ROOT = Path("/data")
+# DATA_ROOT = Path("/data")
+
+# 先頭付近
+from pathlib import Path
+# これに変更（server.py が server/ にある前提で repo-root/data を指す）
+DATA_ROOT = (Path(__file__).resolve().parents[1] / "data").resolve()
+
 
 mcp = FastMCP(
     "mcp-proto",
@@ -30,7 +36,7 @@ def echo(text: str) -> str:
 
 
 @mcp.tool()
-def describe_csv(path: str) -> Dict[str, Union[List[int], List[str], Dict[str, Dict[str, Union[float, str]]]]]:
+def describe_csv(path: str) -> Dict[str, Union[str,List[int], List[str], Dict[str, Dict[str, Union[float, str]]]]]:
     """Return basic statistics for a CSV file located under /data.
 
     Parameters
