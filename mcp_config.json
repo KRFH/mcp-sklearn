@@ -1,0 +1,11 @@
+{
+    "mcpServers": {
+      "mcp-sklearn": {
+        "command": "/Users/kai/Library/Caches/pypoetry/virtualenvs/mcp-proto-vSJD0szg-py3.12/bin/python",
+        "args": ["/Users/kai/Documents/develop/mcp-sklearn/server/server.py"],
+        "env": { "PYTHONUNBUFFERED": "1" },
+        "transport": "stdio"
+      }
+    }
+  }
+  
