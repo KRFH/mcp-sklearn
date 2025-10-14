@@ -1,17 +1,27 @@
+# ./Dockerfile
 FROM python:3.12-slim
 
+# ベースツール
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential curl ca-certificates && \
+    build-essential git curl && \
     rm -rf /var/lib/apt/lists/*
 
-RUN pip install uv
+# Poetry
+ENV POETRY_VERSION=1.8.3 \
+    POETRY_VIRTUALENVS_IN_PROJECT=true \
+    POETRY_NO_INTERACTION=1
+RUN pip install --no-cache-dir "poetry==${POETRY_VERSION}"
 
 WORKDIR /app
-COPY server/pyproject.toml /app/
-RUN uv pip compile -q pyproject.toml > requirements.txt && \
-    uv pip install --system -r requirements.txt
 
-COPY server/server.py /app/server.py
+# 依存定義をルートで扱う（Poetryが相対パスを見失わないように）
+COPY server/pyproject.toml ./pyproject.toml
+COPY server/poetry.lock* ./poetry.lock
+RUN poetry install --only main --no-root
 
-EXPOSE 8080
-CMD ["python", "server.py"]
+# アプリ本体
+COPY server ./server
+RUN mkdir -p /app/data
+
+ENV TRANSPORT=stdio
+CMD ["/bin/bash", "-lc", "cd /app && poetry run python server/server.py --transport stdio"]

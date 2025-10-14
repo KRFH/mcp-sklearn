@@ -1,13 +1,8 @@
+# ./docker-compose.yml
 version: "3.9"
 services:
-  mcp:
+  mcp-sklearn:
     build: .
-    image: mcp-proto:latest
-    container_name: mcp-proto
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./data:/data:ro
-    environment:
-      - PYTHONUNBUFFERED=1
-    restart: unless-stopped
+    image: krfh/mcp-sklearn:stdio
+    # STDIO 接続のため、基本は `docker compose run` で都度起動します
+    # データ共有のためのマウントは run 時に指定するのが安全
