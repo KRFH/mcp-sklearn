@@ -36,7 +36,7 @@ def _resolve_csv_path(path: str) -> Path:
 
 def _ensure_serializable(values: Iterable) -> List[Optional[object]]:
     import numpy as np
-    
+
     serializable: List[Optional[object]] = []
     for value in values:
         if pd.isna(value):
@@ -184,7 +184,7 @@ def describe_csv(path: str) -> DescribeCSVOutput:
     describe: Dict[str, Dict[str, Optional[Any]]] = {}
     for column, stats in describe_df.iterrows():
         describe[column] = {
-            key: (None if pd.isna(value) else _ensure_serializable([value])[0]) 
+            key: (None if pd.isna(value) else _ensure_serializable([value])[0])
             for key, value in stats.items()
         }
 
@@ -211,7 +211,9 @@ def correlation_matrix(
     if columns:
         missing_cols = [col for col in columns if col not in numeric_df.columns]
         if missing_cols:
-            raise ValueError(f"Non-numeric or missing columns requested: {missing_cols}")
+            raise ValueError(
+                f"Non-numeric or missing columns requested: {missing_cols}"
+            )
         numeric_df = numeric_df[columns]
 
     if numeric_df.empty:
