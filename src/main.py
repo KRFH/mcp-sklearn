@@ -38,7 +38,8 @@ PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[1]
 DATA_DIR = PROJECT_ROOT / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-SERVER_ENTRY = (PROJECT_ROOT / "server" / "server.py").as_posix()
+SERVER_ENTRY_EDA = (PROJECT_ROOT / "server" / "eda.py").as_posix()
+SERVER_ENTRY_PREPROCESS = (PROJECT_ROOT / "server" / "preprocess.py").as_posix()
 
 
 # ===============================
@@ -87,15 +88,30 @@ async def main():
         # 複数サーバーを登録したい場合は辞書に追加すればOK。
         client = MultiServerMCPClient(
             {
-                "sklearn": {
+                "eda": {
                     "command": "poetry",
-                    "args": ["run", "python", SERVER_ENTRY, "--transport", "stdio"],
+                    "args": ["run", "python", SERVER_ENTRY_EDA, "--transport", "stdio"],
                     "transport": "stdio",
                     "cwd": (
                         PROJECT_ROOT / "server"
                     ).as_posix(),  # ← server側のpoetryプロジェクトディレクトリ
                     "env": {"PYTHONUNBUFFERED": "1"},
-                }
+                },
+                "preprocess": {
+                    "command": "poetry",
+                    "args": [
+                        "run",
+                        "python",
+                        SERVER_ENTRY_PREPROCESS,
+                        "--transport",
+                        "stdio",
+                    ],
+                    "transport": "stdio",
+                    "cwd": (
+                        PROJECT_ROOT / "server"
+                    ).as_posix(),  # ← server側のpoetryプロジェクトディレクトリ
+                    "env": {"PYTHONUNBUFFERED": "1"},
+                },
             }
         )
 
