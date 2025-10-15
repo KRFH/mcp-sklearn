@@ -11,14 +11,16 @@ Streamlit + OpenAI + MCP(Docker経由) の連携サンプル
   - data/ ディレクトリをホストとコンテナで共有する（CSVなどをやり取りするため）
 """
 
-import os
 import asyncio
+import os
 import pathlib
 
 import streamlit as st
-from langchain_openai import ChatOpenAI  # OpenAI APIを使うLangChainラッパ
 from langchain_core.messages import HumanMessage  # ユーザー・AIのメッセージ管理
-from langchain_mcp_adapters.client import MultiServerMCPClient  # MCPサーバー接続クライアント
+from langchain_mcp_adapters.client import (
+    MultiServerMCPClient,  # MCPサーバー接続クライアント
+)
+from langchain_openai import ChatOpenAI  # OpenAI APIを使うLangChainラッパ
 
 # ===============================
 # ■ 設定セクション
@@ -36,18 +38,7 @@ PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[1]
 DATA_DIR = PROJECT_ROOT / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-# Docker 実行コマンドの引数定義
-# ここでは「krfh/mcp-sklearn:stdio」という MCP サーバーイメージを
-# STDIO モードで都度起動する。
-# data フォルダを /app/data にマウントしてファイル共有する。
-DOCKER_ARGS = [
-    "run",  # docker run コマンド
-    "--rm",  # 終了後コンテナを自動削除
-    "-i",  # STDIN/STDOUT を接続（MCPはstdio通信）
-    "-v",  # ボリュームマウント
-    f"{DATA_DIR}:/app/data",
-    "krfh/mcp-sklearn:stdio",  # イメージ名
-]
+SERVER_ENTRY = (PROJECT_ROOT / "server" / "server.py").as_posix()
 
 
 # ===============================
@@ -87,19 +78,24 @@ async def main():
         messages.append(HumanMessage(prompt))
 
         # OpenAI モデルを初期化
-        chat_model = ChatOpenAI(model=OPENAI_MODEL)
+        chat_model = ChatOpenAI(
+            model=OPENAI_MODEL,
+            api_key=os.environ.get("OPENAI_API_KEY"),
+        )
 
         # --- MCPクライアントを準備 ---
-        # ここでは docker run コマンドを直接指定して、
-        # MCPサーバーを必要な時だけ都度起動する。
         # 複数サーバーを登録したい場合は辞書に追加すればOK。
         client = MultiServerMCPClient(
             {
-                "sklearn": {  # ← サーバー識別名（任意）
-                    "command": "docker",  # 実行コマンド
-                    "args": DOCKER_ARGS,  # 引数リスト
-                    "transport": "stdio",  # 通信方式
-                },
+                "sklearn": {
+                    "command": "poetry",
+                    "args": ["run", "python", SERVER_ENTRY, "--transport", "stdio"],
+                    "transport": "stdio",
+                    "cwd": (
+                        PROJECT_ROOT / "server"
+                    ).as_posix(),  # ← server側のpoetryプロジェクトディレクトリ
+                    "env": {"PYTHONUNBUFFERED": "1"},
+                }
             }
         )
 
