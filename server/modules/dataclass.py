@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 
 @dataclass
@@ -93,3 +93,62 @@ class ProcessedDataOutput:
     strategy: str
     info: ProcessedDataInfo
     processed_data_preview: List[Dict[str, Any]]  # First 5 rows
+
+
+# EDA Data Models
+
+
+@dataclass
+class ListDatasetsOutput:
+    data_root: str
+    datasets: List[str]
+
+
+@dataclass
+class PreviewCSVOutput:
+    path: str
+    n_rows: int
+    columns: List[str]
+    rows: List[Dict[str, Optional[Any]]]
+
+
+@dataclass
+class ColumnSummary:
+    dtype: str
+    non_null: int
+    null: int
+    unique: int
+
+
+@dataclass
+class ColumnInfoOutput:
+    path: str
+    columns: Dict[str, ColumnSummary]
+
+
+@dataclass
+class MissingValueSummary:
+    missing: int
+    ratio: float
+
+
+@dataclass
+class MissingValuesOutput:
+    path: str
+    summary: Dict[str, MissingValueSummary]
+    n_rows: int
+
+
+@dataclass
+class DescribeCSVOutput:
+    path: str
+    shape: List[int]
+    describe: Dict[str, Dict[str, Optional[Any]]]
+
+
+@dataclass
+class CorrelationMatrixOutput:
+    path: str
+    columns: List[str]
+    method: str
+    matrix: Dict[str, Dict[str, Optional[float]]]

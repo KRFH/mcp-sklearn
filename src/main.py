@@ -48,7 +48,7 @@ SERVER_ENTRY_PREPROCESS = (PROJECT_ROOT / "server" / "preprocess.py").as_posix()
 async def main():
     # ページ設定
     st.set_page_config(page_title="OpenAI chat with MCP tools", page_icon="🧰")
-    st.title("OpenAI chat with MCP tools (STDIO Docker)")
+    st.title("OpenAI chat with MCP tools")
 
     # --- メッセージ履歴をセッションに保持 ---
     # Streamlit は再実行のたびに状態がリセットされるので、
