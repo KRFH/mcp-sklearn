@@ -1,142 +1,150 @@
-# MCP CSV Analysis Server
+# MCP Server + Streamlit Chat UI
 
-このリポジトリは **Model Context Protocol (MCP)** を使用した CSV データ分析専用サーバーです。Python 公式 SDK（FastMCP）で実装され、CSV ファイルの探索・統計分析に特化した 6 つのツールを提供します。
+このリポジトリは Model Context Protocol (MCP) を使用して、
+FastMCP ベースの CSV 分析用 MCP サーバーと、
+OpenAI（GPT-4o）から自然言語で操作できる Streamlit UI を構築するプロジェクトです。
 
----
-
-## ✨ 主な特徴
-
-* 📊 **CSV 分析特化**: データ探索から統計分析まで一貫したワークフローをサポート
-* 🔒 **セキュア**: `data/` ディレクトリ内のファイルのみアクセス可能
-* 🚀 **高速**: pandas ベースの効率的なデータ処理
-* 🌐 **HTTP / STDIO 両対応**: 開発時は HTTP、Claude Desktop などからは STDIO で利用可能
-* 🛠️ **MCP 準拠**: Claude Desktop / Claude Code / MCP CLI などから利用可能
+Docker 依存を排除し、同一コンテナ／ローカル環境内で MCP サーバーを直接起動して利用します。
 
 ---
 
-## 📂 プロジェクト構成
+## 全体構成
 
 ```
 .
-├── Dockerfile
-├── docker-compose.yml
-├── README.md
-├── data/                ← CSV を置く場所
+├── server/                 # MCP サーバー（FastMCP）
+│   ├── server.py
+│   └── pyproject.toml
+├── src/                    # Streamlit クライアント（OpenAI + MCP）
+│   └── main.py
+├── data/                   # 分析用CSVを置く場所
 │   └── sample.csv
-└── server/
-    ├── pyproject.toml   ← Poetry プロジェクト設定
-    └── server.py        ← FastMCP サーバ本体
+├── README.md
+└── poetry.lock / pyproject.toml
 ```
 
-* **`data/`** にある CSV をツールから読み込めます
-* **`server/`** は Poetry で依存管理します
+---
+
+## コンセプト
+
+MCP（Model Context Protocol）は「AIモデルが外部ツールを安全に呼び出すための共通プロトコル」です。
+
+このプロジェクトでは、
+
+* **サーバー側（MCP Server）** がデータ分析ツール群を公開し、
+* **クライアント側（Streamlit）** が MCP を経由してサーバーを直接起動・利用します。
+
+```
+OpenAI (GPT)  ⇄  Streamlit  ⇄  MCP Server (FastMCP, stdio)
+```
+
+自然言語からデータ分析を行う最小構成を実現しています。
 
 ---
 
-## 🔧 提供ツール
+## 主要構成要素
 
-このサーバーは、CSV ファイルの分析に特化した 6 つのツールを提供します：
-
-### 📋 データ探索ツール
-
-* **`list_datasets()`** : `data/` ディレクトリ内の CSV ファイル一覧を取得
-* **`preview_csv(path: str, n_rows: int = 5)`** : CSV の先頭数行をプレビュー
-* **`column_info(path: str)`** : 各列の dtype・非 null 数・null 数・ユニーク数を取得
-* **`missing_values(path: str)`** : 欠損値数と欠損率のサマリー
-
-### 📊 データ分析ツール
-
-* **`describe_csv(path: str)`** : 基本統計量（平均、標準偏差、最小値、最大値など）を取得
-* **`correlation_matrix(path: str, columns?: List[str], method: str = "pearson")`** : 数値列の相関行列を計算
-
-> **パス指定の注意点**
->
-> * `path` は基本的に `data/` からの相対パス（例: `"sample.csv"`）
-> * 絶対パスを渡す場合も `data/` 配下である必要があります
-> * セキュリティのため、`data/` ディレクトリ外のファイルにはアクセスできません
+| コンポーネント            | 役割                                                                                 |
+| ------------------ | ---------------------------------------------------------------------------------- |
+| `server/server.py` | MCPサーバー本体。FastMCPでツールを登録し、`mcp.run(transport="stdio")` で待受                         |
+| `src/main.py`      | Streamlit + OpenAI UI。`MultiServerMCPClient` 経由で `poetry run python` を使ってサーバーを直接起動 |
+| `data/`            | CSVや分析対象ファイルを配置する共有ディレクトリ                                                          |
 
 ---
 
-## 🚀 実行方法
+## セットアップ & 起動手順
 
-### STDIO（Claude Desktop などから利用する場合）
-
-1. Poetry で依存をインストール
+### 1. 依存をインストール
 
 ```bash
-cd server
 poetry install
 ```
 
-2. `server.py` の末尾を **STDIO モード**に変更済み（`mcp.run(transport="stdio")`）。
+依存パッケージ：
 
-3. Claude Desktop の設定ファイル（`~/Library/Application Support/Claude/claude_desktop_config.json`）に以下を追記：
+* OpenAI / LangChain / LangChain MCP adapters
+* mcp / pandas / pyarrow
 
-```json
-{
-  "mcpServers": {
-    "mcp-sklearn": {
-      "command": "/Users/you/.cache/pypoetry/virtualenvs/mcp-sklearn-XXXX-py3.12/bin/python",
-      "args": ["/ABSOLUTE/PATH/TO/mcp-sklearn/server/server.py"],
-      "env": { "PYTHONUNBUFFERED": "1" }
+### 2. 動作確認
+
+まず MCP サーバーが単体で起動できるかを確認します。
+
+```bash
+cd server
+poetry run python server.py --transport stdio
+```
+
+
+
+### 3. Streamlit アプリを起動
+
+```bash
+export OPENAI_API_KEY=sk-xxxx
+poetry run streamlit run src/main.py
+```
+
+ブラウザで「OpenAI chat with MCP tools」が開きます。
+
+---
+
+## Streamlit 側（src/main.py）の仕組み
+
+Streamlit 側では `MultiServerMCPClient` を使い、Poetry 環境下の Python で MCP サーバーを直接起動します。
+
+```python
+SERVER_ENTRY = (PROJECT_ROOT / "server" / "server.py").as_posix()
+
+client = MultiServerMCPClient({
+    "sklearn": {
+        "command": "poetry",
+        "args": ["run", "python", SERVER_ENTRY, "--transport", "stdio"],
+        "transport": "stdio",
+        "cwd": (PROJECT_ROOT / "server").as_posix(),
+        "env": {"PYTHONUNBUFFERED": "1"},
     }
-  }
-}
+})
 ```
 
-> `args` は **絶対パス**にすること。相対指定だと `//server.py` エラーになります。
-
-4. Claude Desktop を再起動すると、ツール一覧に `mcp-sklearn` が表示されます。
-
-### HTTP（開発時や他クライアントから利用）
-
-```bash
-cd server
-poetry install
-poetry run python server.py
-# → http://localhost:8080/mcp で待ち受け
-```
-
-別ターミナルから MCP-CLI を利用:
-
-```bash
-npx @wong2/mcp-cli --url http://127.0.0.1:8080/mcp
-```
-
-### Docker
-
-```bash
-docker compose up --build -d
-```
+依存は `server` ディレクトリ内の Poetry 環境から自動的に解決されます。
 
 ---
 
-## 💡 トラブルシューティング
+## MCP サーバー（server.py）の例
 
-* **STDIO で `Server disconnected` が出る場合**
+```python
+from mcp.server.fastmcp import FastMCP
+import pandas as pd
 
-  * `server.py` の末尾が `mcp.run(transport="stdio")` になっているか確認
-  * `print()` は stdout に出さない（`file=sys.stderr` にする）
-  * Claude 側の `args` は必ず **絶対パス**にする
+mcp = FastMCP("mcp-sklearn")
 
-* **HTTP 接続がうまくいかない場合**
+@mcp.tool()
+def preview_csv(path: str, n_rows: int = 5) -> str:
+    df = pd.read_csv(path)
+    return df.head(n_rows).to_csv(index=False)
 
-  * `curl http://127.0.0.1:8080/mcp` でエンドポイント応答を確認
-  * Node 18 以上が必要（`SyntaxError: &&=` が出る場合）
+@mcp.tool()
+def describe_csv(path: str) -> str:
+    df = pd.read_csv(path)
+    return df.describe().to_csv()
 
-* **App Translocation エラー (read-only volume)**
+if __name__ == "__main__":
+    mcp.run(transport="stdio")
+```
 
-  * macOS ではアプリを `/Applications` に移動して実行してください
+`@mcp.tool()` で登録した関数は、ChatGPTやLangChain経由で呼び出せます。
+
+
+
+## まとめ
+
+| 要素     | 構成                             |
+| ------ | ------------------------------ |
+| 通信方式   | STDIO（Pythonプロセス直起動）           |
+| クライアント | Streamlit + LangChain + OpenAI |
+| サーバー   | FastMCP (Python)               |
+| 機能     | CSVプレビュー・統計量・相関行列など            |
+| セキュリティ | `data/` 配下のみアクセス許可             |
+| 利点     | Docker不要・軽量・Poetry一体管理         |
 
 ---
 
-## ✅ ワークフロー例
-
-1. `list_datasets()` → 利用可能な CSV を確認
-2. `preview_csv()` → データ概要を確認
-3. `column_info()` / `missing_values()` → データ品質を把握
-4. `describe_csv()` / `correlation_matrix()` → 分析・相関確認
-
----
-
-この README は、**STDIO/HTTP 両対応を明示**し、Claude Desktop から使う際の設定の注意点（特に `args` は絶対パスにする）を追記しました。
