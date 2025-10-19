@@ -20,6 +20,7 @@ from langchain_core.messages import HumanMessage  # ユーザー・AIのメッ�
 from langchain_mcp_adapters.client import (
     MultiServerMCPClient,  # MCPサーバー接続クライアント
 )
+from langchain_mcp_adapters.tools import BaseTool
 from langchain_openai import ChatOpenAI  # OpenAI APIを使うLangChainラッパ
 
 # ===============================
@@ -45,6 +46,77 @@ SERVER_ENTRY_PREPROCESS = (PROJECT_ROOT / "server" / "preprocess.py").as_posix()
 # ===============================
 # ■ Streamlit アプリ本体
 # ===============================
+def _create_mcp_client() -> MultiServerMCPClient:
+    """Create (or reuse) the MultiServerMCPClient instance for the active loop."""
+
+    loop = asyncio.get_running_loop()
+    cache_key = "_mcp_client_cache"
+    cached = st.session_state.get(cache_key)
+    if cached and cached.get("loop_id") == id(loop):
+        return cached["client"]
+
+    client = MultiServerMCPClient(
+        {
+            "eda": {
+                "command": "poetry",
+                "args": ["run", "python", SERVER_ENTRY_EDA, "--transport", "stdio"],
+                "transport": "stdio",
+                "cwd": (PROJECT_ROOT / "server").as_posix(),
+                "env": {"PYTHONUNBUFFERED": "1"},
+            },
+            "preprocess": {
+                "command": "poetry",
+                "args": [
+                    "run",
+                    "python",
+                    SERVER_ENTRY_PREPROCESS,
+                    "--transport",
+                    "stdio",
+                ],
+                "transport": "stdio",
+                "cwd": (PROJECT_ROOT / "server").as_posix(),
+                "env": {"PYTHONUNBUFFERED": "1"},
+            },
+        }
+    )
+    st.session_state[cache_key] = {"loop_id": id(loop), "client": client}
+    # ループが変わったタイミングではツールの再取得が必要になるのでキャッシュを無効化
+    st.session_state.pop("mcp_tools", None)
+    return client
+
+
+async def _load_mcp_tools(client: MultiServerMCPClient) -> list[BaseTool]:
+    """Load MCP tools sequentially to avoid masking errors in ExceptionGroup."""
+
+    tools: list[BaseTool] = []
+    failed_servers: list[tuple[str, BaseException]] = []
+    for server_name in client.connections.keys():
+        try:
+            server_tools = await client.get_tools(server_name=server_name)
+        except BaseException as exc:  # noqa: BLE001
+            failed_servers.append((server_name, exc))
+        else:
+            tools.extend(server_tools)
+
+    if failed_servers:
+        error_lines = [
+            f"- {server}: {exc}" for server, exc in failed_servers
+        ]
+        st.error(
+            "\n".join(
+                [
+                    "MCPツールの取得に失敗しました。各サーバーの状態を確認してください。",
+                    *error_lines,
+                ]
+            )
+        )
+        st.session_state.pop("mcp_tools", None)
+        st.session_state.pop("_mcp_client_cache", None)
+        st.stop()
+
+    return tools
+
+
 async def main():
     # ページ設定
     st.set_page_config(page_title="OpenAI chat with MCP tools", page_icon="🧰")
@@ -86,37 +158,13 @@ async def main():
 
         # --- MCPクライアントを準備 ---
         # 複数サーバーを登録したい場合は辞書に追加すればOK。
-        client = MultiServerMCPClient(
-            {
-                "eda": {
-                    "command": "poetry",
-                    "args": ["run", "python", SERVER_ENTRY_EDA, "--transport", "stdio"],
-                    "transport": "stdio",
-                    "cwd": (
-                        PROJECT_ROOT / "server"
-                    ).as_posix(),  # ← server側のpoetryプロジェクトディレクトリ
-                    "env": {"PYTHONUNBUFFERED": "1"},
-                },
-                "preprocess": {
-                    "command": "poetry",
-                    "args": [
-                        "run",
-                        "python",
-                        SERVER_ENTRY_PREPROCESS,
-                        "--transport",
-                        "stdio",
-                    ],
-                    "transport": "stdio",
-                    "cwd": (
-                        PROJECT_ROOT / "server"
-                    ).as_posix(),  # ← server側のpoetryプロジェクトディレクトリ
-                    "env": {"PYTHONUNBUFFERED": "1"},
-                },
-            }
-        )
+        client = _create_mcp_client()
 
         # MCPサーバーから利用可能なツール一覧を取得
-        tools = await client.get_tools()
+        tools = st.session_state.get("mcp_tools")
+        if tools is None:
+            tools = await _load_mcp_tools(client)
+            st.session_state.mcp_tools = tools
 
         # ===============================
         # ■ チャット＋ツール呼び出しループ
