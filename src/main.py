@@ -1,14 +1,14 @@
 """
-Streamlit + OpenAI + MCP(Docker経由) の連携サンプル
+Streamlit + OpenAI + MCP(ローカルSTDIO) の連携サンプル
 
 ユーザーが入力したテキストを OpenAI に送り、
-必要に応じて Docker 内の MCP サーバー（例：mcp-sklearn）を自動起動して
+必要に応じてローカルで STDIO 形式の MCP サーバー（例：mcp-sklearn）を起動して
 ツールを呼び出しながら回答を生成する。
 
 ※ 前提
   - OpenAI の APIキーを環境変数 OPENAI_API_KEY に設定しておく
-  - MCPサーバー（krfh/mcp-sklearn:stdio）イメージが docker images に存在する
-  - data/ ディレクトリをホストとコンテナで共有する（CSVなどをやり取りするため）
+  - Poetry 経由で server/ 配下の MCP サーバーを起動できるよう依存関係をインストールしておく
+  - data/ ディレクトリはローカルで共有し、CSV などの入出力に利用する
 """
 
 import asyncio
