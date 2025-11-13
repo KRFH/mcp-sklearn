@@ -1,10 +1,11 @@
-# MCP Server + Streamlit Chat UI
+# MCP-sklearn: データ分析・前処理用 MCP サーバー + Streamlit UI
 
 このリポジトリは Model Context Protocol (MCP) を使用して、
-FastMCP ベースの CSV 分析用 MCP サーバーと、
+scikit-learn ベースのデータ分析・前処理用 MCP サーバーと、
 OpenAI（GPT-4o）から自然言語で操作できる Streamlit UI を構築するプロジェクトです。
 
-Docker 依存を排除し、同一コンテナ／ローカル環境内で MCP サーバーを直接起動して利用します。
+2つの専門サーバー（EDA分析・データ品質分析）を提供し、Docker 依存を排除して
+同一環境内で MCP サーバーを直接起動して利用します。
 
 ---
 
@@ -12,15 +13,22 @@ Docker 依存を排除し、同一コンテナ／ローカル環境内で MCP �
 
 ```
 .
-├── server/                 # MCP サーバー（FastMCP）
-│   ├── server.py
-│   └── pyproject.toml
-├── src/                    # Streamlit クライアント（OpenAI + MCP）
+├── server/                 # MCP サーバー群（FastMCP）
+│   ├── eda.py             # EDA（探索的データ分析）サーバー
+│   ├── preprocess.py      # データ品質・前処理サーバー
+│   ├── pyproject.toml     # サーバー側依存関係
+│   └── modules/           # 共通モジュール
+│       ├── __init__.py
+│       ├── dataclass.py   # 型定義
+│       ├── eda_analyzer.py # EDA分析ロジック
+│       └── data_quality.py # データ品質分析ロジック
+├── src/                   # Streamlit クライアント（OpenAI + MCP）
 │   └── main.py
-├── data/                   # 分析用CSVを置く場所
-│   └── sample.csv
+├── data/                  # 分析用CSVを置く場所
+│   ├── sample.csv
+│   ├── titanic.csv
 ├── README.md
-└── poetry.lock / pyproject.toml
+└── pyproject.toml         # クライアント側依存関係
 ```
 
 ---
@@ -31,24 +39,28 @@ MCP（Model Context Protocol）は「AIモデルが外部ツールを安全に�
 
 このプロジェクトでは、
 
-* **サーバー側（MCP Server）** がデータ分析ツール群を公開し、
-* **クライアント側（Streamlit）** が MCP を経由してサーバーを直接起動・利用します。
+* **EDAサーバー** - 探索的データ分析（統計量、相関、可視化など）
+* **前処理サーバー** - データ品質分析・欠損値処理・外れ値検出
+* **Streamlitクライアント** - 自然言語でサーバー機能を呼び出し
 
 ```
-OpenAI (GPT)  ⇄  Streamlit  ⇄  MCP Server (FastMCP, stdio)
+OpenAI (GPT)  ⇄  Streamlit Client  ⇄  MCP Servers (EDA + Preprocessing)
+                                      ├── eda.py (port 8080)
+                                      └── preprocess.py (port 8081)
 ```
 
-自然言語からデータ分析を行う最小構成を実現しています。
+scikit-learn + pandas ベースで機械学習向けデータ分析を自然言語で実行できます。
 
 ---
 
 ## 主要構成要素
 
-| コンポーネント            | 役割                                                                                 |
-| ------------------ | ---------------------------------------------------------------------------------- |
-| `server/server.py` | MCPサーバー本体。FastMCPでツールを登録し、`mcp.run(transport="stdio")` で待受                         |
-| `src/main.py`      | Streamlit + OpenAI UI。`MultiServerMCPClient` 経由で `poetry run python` を使ってサーバーを直接起動 |
-| `data/`            | CSVや分析対象ファイルを配置する共有ディレクトリ                                                          |
+| コンポーネント                | 役割                                                                           |
+| ---------------------- | ---------------------------------------------------------------------------- |
+| [`server/eda.py`](server/eda.py:1)           | EDA用MCPサーバー。データプレビュー・統計量・相関分析などを提供                                        |
+| [`server/preprocess.py`](server/preprocess.py:1)  | 前処理用MCPサーバー。データ品質分析・欠損値処理・外れ値検出を提供                                     |
+| [`src/main.py`](src/main.py:1)          | Streamlit UI。`MultiServerMCPClient`で両サーバーを並行起動・制御                          |
+| [`data/`](data/:1)               | CSV分析対象ファイルを配置。処理結果も保存される共有ディレクトリ                                       |
 
 ---
 
@@ -56,48 +68,69 @@ OpenAI (GPT)  ⇄  Streamlit  ⇄  MCP Server (FastMCP, stdio)
 
 ### 1. 依存をインストール
 
+**メインプロジェクト側：**
 ```bash
 poetry install
 ```
 
-依存パッケージ：
+**サーバー側：**
+```bash
+cd server
+poetry install
+```
 
-* OpenAI / LangChain / LangChain MCP adapters
-* mcp / pandas / pyarrow
+### 主要依存パッケージ
 
-### 2. 動作確認
+**クライアント側 ([`pyproject.toml`](pyproject.toml:1))：**
+* openai, langchain, langchain-openai, langchain-mcp-adapters
+* streamlit, mcp, pandas, pyarrow
 
-まず MCP サーバーが単体で起動できるかを確認します。
+**サーバー側 ([`server/pyproject.toml`](server/pyproject.toml:1))：**
+* mcp, pandas, pyarrow, scikit-learn, scipy
+
+### 2. 単体動作確認（オプション）
+
+MCPサーバーを個別にテストする場合：
 
 ```bash
 cd server
-poetry run python server.py --transport stdio
+# EDA サーバー単体確認
+poetry run python eda.py
+
+# データ品質サーバー単体確認
+poetry run python preprocess.py
 ```
 
-
-
-### 3. Streamlit アプリを起動
+### 3. Streamlit統合アプリを起動
 
 ```bash
 export OPENAI_API_KEY=sk-xxxx
 poetry run streamlit run src/main.py
 ```
 
-ブラウザで「OpenAI chat with MCP tools」が開きます。
+ブラウザで「OpenAI chat with MCP tools」が開き、2つのMCPサーバーが起動されます。
 
 ---
 
 ## Streamlit 側（src/main.py）の仕組み
 
-Streamlit 側では `MultiServerMCPClient` を使い、Poetry 環境下の Python で MCP サーバーを直接起動します。
+Streamlit側では `MultiServerMCPClient` を使い、複数のMCPサーバーを並行起動します。
 
 ```python
-SERVER_ENTRY = (PROJECT_ROOT / "server" / "server.py").as_posix()
+SERVER_ENTRY_EDA = (PROJECT_ROOT / "server" / "eda.py").as_posix()
+SERVER_ENTRY_PREPROCESS = (PROJECT_ROOT / "server" / "preprocess.py").as_posix()
 
 client = MultiServerMCPClient({
-    "sklearn": {
+    "eda": {
         "command": "poetry",
-        "args": ["run", "python", SERVER_ENTRY, "--transport", "stdio"],
+        "args": ["run", "python", SERVER_ENTRY_EDA, "--transport", "stdio"],
+        "transport": "stdio",
+        "cwd": (PROJECT_ROOT / "server").as_posix(),
+        "env": {"PYTHONUNBUFFERED": "1"},
+    },
+    "preprocess": {
+        "command": "poetry",
+        "args": ["run", "python", SERVER_ENTRY_PREPROCESS, "--transport", "stdio"],
         "transport": "stdio",
         "cwd": (PROJECT_ROOT / "server").as_posix(),
         "env": {"PYTHONUNBUFFERED": "1"},
@@ -105,46 +138,30 @@ client = MultiServerMCPClient({
 })
 ```
 
-依存は `server` ディレクトリ内の Poetry 環境から自動的に解決されます。
+各サーバーの依存関係は `server/` ディレクトリ内の Poetry 環境から自動解決されます。
 
 ---
 
-## MCP サーバー（server.py）の例
+## 使用例
 
-```python
-from mcp.server.fastmcp import FastMCP
-import pandas as pd
+チャット画面で以下のような質問ができます：
 
-mcp = FastMCP("mcp-sklearn")
-
-@mcp.tool()
-def preview_csv(path: str, n_rows: int = 5) -> str:
-    df = pd.read_csv(path)
-    return df.head(n_rows).to_csv(index=False)
-
-@mcp.tool()
-def describe_csv(path: str) -> str:
-    df = pd.read_csv(path)
-    return df.describe().to_csv()
-
-if __name__ == "__main__":
-    mcp.run(transport="stdio")
 ```
+「titanic.csvのデータを確認して、欠損値の状況を教えて」
+「Survived列とPclass列の相関を調べて」
 
-`@mcp.tool()` で登録した関数は、ChatGPTやLangChain経由で呼び出せます。
-
-
+```
 
 ## まとめ
 
-| 要素     | 構成                             |
-| ------ | ------------------------------ |
-| 通信方式   | STDIO（Pythonプロセス直起動）           |
-| クライアント | Streamlit + LangChain + OpenAI |
-| サーバー   | FastMCP (Python)               |
-| 機能     | CSVプレビュー・統計量・相関行列など            |
-| セキュリティ | `data/` 配下のみアクセス許可             |
-| 利点     | Docker不要・軽量・Poetry一体管理         |
+| 要素         | 構成                                    |
+| ---------- | ------------------------------------- |
+| 通信方式       | STDIO（Pythonプロセス直起動）                  |
+| クライアント     | Streamlit + LangChain + OpenAI       |
+| サーバー       | FastMCP × 2台（EDA + 前処理）              |
+| 機能         | EDA分析・データ品質・前処理・機械学習向けデータ準備          |
+| セキュリティ     | [`data/`](data/:1) 配下のみアクセス許可                |
+| 利点         | Docker不要・軽量・scikit-learn統合・Poetry一体管理 |
 
 ---
 
